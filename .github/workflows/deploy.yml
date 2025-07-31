@@ -23,17 +23,18 @@ jobs:
       - name: Deploy code via SSM
         run: |
           COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy from GitHub Actions" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
             --parameters '{
               "commands": [
+                "#!/bin/bash",
                 "cd /tmp",
                 "curl -L -H \"Authorization: token ${{ secrets.GITHUB_TOKEN_SSM }}\" -o latest.zip https://api.github.com/repos/sanket701748/main/zipball/main",
                 "unzip -q latest.zip -d extracted",
                 "EXTRACTED_DIR=$(ls -d extracted/*/ | head -n1)",
                 "sudo rm -rf /var/www/html/*",
-                "sudo cp -r $EXTRACTED_DIR* /var/www/html/",
+                "sudo cp -r ${EXTRACTED_DIR}* /var/www/html/",
                 "sudo chown -R www-data:www-data /var/www/html",
                 "sudo chmod -R 755 /var/www/html"
               ]
