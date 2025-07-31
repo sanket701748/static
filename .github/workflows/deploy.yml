@@ -30,7 +30,7 @@ jobs:
       - name: Move files to /var/www/html on EC2
         run: |
           ssh -i ec2_key.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} \
-          "sudo rm -rf /var/www/html/* && \
+#          "sudo rm -rf /var/www/html/* && \
            sudo cp -r /home/ubuntu/site-temp/* /var/www/html/ && \
            sudo chown -R www-data:www-data /var/www/html/ && \
            rm -rf /home/ubuntu/site-temp"
