@@ -1,4 +1,4 @@
-- name: Deploy code via SSM Run Command (download & unzip)
+name: Deploy code via SSM Run Command (download & unzip)
   run: |
     REPO_URL="https://api.github.com/repos/your-user/your-repo/zipball/main"
 
