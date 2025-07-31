@@ -1,49 +1,26 @@
-name: Deploy to EC2 via SSM
+- name: Deploy code via SSM Run Command (download & unzip)
+  run: |
+    REPO_URL="https://api.github.com/repos/your-user/your-repo/zipball/main"
 
-on:
-  push:
-    branches:
-      - main
+    COMMAND_ID=$(aws ssm send-command \
+      --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+      --document-name "AWS-RunShellScript" \
+      --comment "Deploy from GitHub Actions" \
+      --parameters commands="[
+        'cd /var/www/html',
+        'sudo rm -rf *',
+        'curl -L -H \"Authorization: token ${{ secrets.GITHUB_TOKEN_SSM }}\" -o latest.zip $REPO_URL',
+        'unzip latest.zip',
+        'mv $(unzip -Z -1 latest.zip | head -1 | cut -f1 -d\"/\")/* ./',
+        'rm -rf latest.zip',
+        'sudo chown -R www-data:www-data /var/www/html',
+        'sudo chmod -R 755 /var/www/html'
+      ]" \
+      --query "Command.CommandId" --output text)
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    echo "Command ID: $COMMAND_ID"
+    sleep 20
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Deploy code via SSM Run Command (download & unzip)
-        id: deploy_command
-        run: |
-          REPO_URL="https://github.com/your-user/your-repo/archive/refs/heads/main.zip"
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy from GitHub Actions" \
-            --parameters commands="[
-              'cd /var/www/html',
-              'sudo rm -rf *',
-              'curl -L -o latest.zip $REPO_URL',
-              'unzip latest.zip',
-              'mv your-repo-main/* ./',
-              'rm -rf your-repo-main latest.zip',
-              'sudo chown -R www-data:www-data /var/www/html',
-              'sudo chmod -R 755 /var/www/html'
-            ]" \
-            --query "Command.CommandId" --output text)
-
-          echo "Command ID: $COMMAND_ID"
-          sleep 20
-
-          aws ssm get-command-invocation \
-            --command-id $COMMAND_ID \
-            --instance-id ${{ secrets.EC2_INSTANCE_ID }}
+    aws ssm get-command-invocation \
+      --command-id $COMMAND_ID \
+      --instance-id ${{ secrets.EC2_INSTANCE_ID }}
