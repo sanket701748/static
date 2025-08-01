@@ -15,7 +15,7 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy static HTML/CSS from GitHub" \
-            --instance-ids "i-04ec76ff27f82e757" \
+            --instance-ids "i-068d327ee8eb1b4d7" \
             --region us-east-1 \
             --parameters 'commands=[
               "cd /var/www/html",
