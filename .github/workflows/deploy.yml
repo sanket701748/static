@@ -20,7 +20,8 @@ jobs:
             --region us-east-1 \
             --parameters 'commands=[
               "cd /var/www/html",
-              "[[ -d .git ]] && git pull origin main || git clone https://github.com/sanket701748/static.git"
+              "rm -rf *",
+              "git clone https://token:${GH_PAT}@https://github.com/sanket701748/static/.git ."
             ]' \
             --query "Command.CommandId" \
             --output text)
@@ -29,6 +30,7 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Fetch SSM Command Output
         run: |
