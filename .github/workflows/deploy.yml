@@ -21,7 +21,7 @@ jobs:
             --parameters 'commands=[
               "cd /var/www/html",
               "rm -rf *",
-              "git clone https://token:${GH_PAT}@https://github.com/sanket701748/static/.git ."
+              "git clone https://token:${GH_PAT}@github.com/sanket701748/static.git ."
             ]' \
             --query "Command.CommandId" \
             --output text)
