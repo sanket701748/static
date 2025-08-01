@@ -18,14 +18,12 @@ jobs:
             --comment "Deploy static HTML/CSS from GitHub" \
             --instance-ids "i-068d327ee8eb1b4d7" \
             --region us-east-1 \
-            --parameters 'commands=[
-            "rm -rf /tmp/deploy-temp",
-            "git clone https://${{ secrets.GH_PAT }}@github.com/sanket701748/static.git /tmp/deploy-temp",
-            "rm -rf /var/www/html/*",
-            "cp -r /tmp/deploy-temp/* /var/www/html/"
-                                                                   
-   ]'
-
+            --parameters "commands=[
+              rm -rf /tmp/deploy-temp,
+              git clone https://${{ secrets.GH_PAT }}@github.com/sanket701748/static.git /tmp/deploy-temp,
+              rm -rf /var/www/html/*,
+              cp -r /tmp/deploy-temp/* /var/www/html/
+            ]" \
             --query "Command.CommandId" \
             --output text)
 
@@ -33,7 +31,6 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: Wait for SSM Command & Fetch Output
         run: |
