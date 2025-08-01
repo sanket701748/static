@@ -19,11 +19,13 @@ jobs:
             --instance-ids "i-068d327ee8eb1b4d7" \
             --region us-east-1 \
             --parameters 'commands=[
-              "rm -rf /tmp/deploy-temp",
-              "git clone https://${GH_PAT}@github.com/sanket701748/static.git /tmp/deploy-temp",
-              "rm -rf /var/www/html/*",
-              "cp -r /tmp/deploy-temp/* /var/www/html/"
-            ]' \
+            "rm -rf /tmp/deploy-temp",
+            "git clone https://${{ secrets.GH_PAT }}@github.com/sanket701748/static.git /tmp/deploy-temp",
+            "rm -rf /var/www/html/*",
+            "cp -r /tmp/deploy-temp/* /var/www/html/"
+                                                                   
+   ]'
+
             --query "Command.CommandId" \
             --output text)
 
