@@ -20,7 +20,7 @@ jobs:
             --region us-east-1 \
             --parameters 'commands=[
               "cd /var/www/html",
-              "git pull origin main"
+              "[[ -d .git ]] && git pull origin main || git clone https://github.com/sanket701748/static.git ."
             ]' \
             --query "Command.CommandId" \
             --output text)
@@ -33,7 +33,7 @@ jobs:
       - name: Fetch SSM Command Output
         run: |
           echo "Waiting for SSM command to complete..."
-          sleep 10  # Give the instance some time to execute
+          sleep 10
 
           aws ssm get-command-invocation \
             --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
