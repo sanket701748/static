@@ -20,7 +20,7 @@ jobs:
             --region us-east-1 \
             --parameters 'commands=[
               "cd /var/www/html",
-              "[[ -d .git ]] && git pull origin main || git clone https://github.com/sanket701748/static.git ."
+              "[[ -d .git ]] && git pull origin main || git clone https://github.com/sanket701748/static.git"
             ]' \
             --query "Command.CommandId" \
             --output text)
