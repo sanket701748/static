@@ -70,4 +70,4 @@ jobs:
               echo "⏳ Still waiting..."
               sleep 5
             fi
-          done.
+          done
