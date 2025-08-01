@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy HTML/CSS via SSM
+      - name: Send SSM Command
+        id: ssm_deploy
         run: |
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy static HTML/CSS from GitHub" \
             --instance-ids "i-068d327ee8eb1b4d7" \
@@ -21,6 +22,24 @@ jobs:
               "cd /var/www/html",
               "git pull origin main"
             ]' \
+            --query "Command.CommandId" \
+            --output text)
+          
+          echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Fetch SSM Command Output
+        run: |
+          echo "Waiting for SSM command to complete..."
+          sleep 10  # Give the instance some time to execute
+
+          aws ssm get-command-invocation \
+            --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
+            --instance-id "i-068d327ee8eb1b4d7" \
+            --region us-east-1 \
+            --query "StandardOutputContent" \
             --output text
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
