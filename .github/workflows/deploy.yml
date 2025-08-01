@@ -1,21 +1,33 @@
-name: Deploy Static Website via SSM
+name: Deploy Static Website via SSM (OIDC Auth)
 
 on:
   push:
     branches:
       - main
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send SSM Command to EC2
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::787187108815:role/GitHubOIDC-DeployRole
+          aws-region: us-east-1
+
+      - name: Deploy via SSM to EC2
         id: ssm_deploy
         run: |
+          echo "Sending SSM deployment command..."
+
           CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy static HTML/CSS from GitHub" \
+            --comment "Deploy static HTML/CSS from GitHub via OIDC" \
             --instance-ids "i-068d327ee8eb1b4d7" \
             --region us-east-1 \
             --parameters "commands=[
@@ -28,14 +40,10 @@ jobs:
             --output text)
 
           echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      - name: Wait for SSM Command & Fetch Output
+      - name: Wait for SSM and Fetch Output
         run: |
           echo "Waiting for SSM command to complete..."
-
           for i in {1..10}; do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
@@ -47,13 +55,7 @@ jobs:
             echo "Current Status: $STATUS"
 
             if [[ "$STATUS" == "Success" ]]; then
-              echo "✅ SSM command completed successfully. Output:"
-              aws ssm get-command-invocation \
-                --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-                --instance-id "i-068d327ee8eb1b4d7" \
-                --region us-east-1 \
-                --query "StandardOutputContent" \
-                --output text
+              echo "✅ SSM command succeeded!"
               break
             elif [[ "$STATUS" == "Failed" ]]; then
               echo "❌ SSM command failed. Error:"
@@ -69,6 +71,3 @@ jobs:
               sleep 5
             fi
           done
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
