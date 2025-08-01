@@ -20,7 +20,7 @@ jobs:
             --region us-east-1 \
             --parameters 'commands=[
               "rm -rf /tmp/deploy-temp",
-              "git clone https://token:${GH_PAT}@github.com/sanket701748/static.git /tmp/deploy-temp",
+              "git clone https://${GH_PAT}@github.com/sanket701748/static.git /tmp/deploy-temp",
               "rm -rf /var/www/html/*",
               "cp -r /tmp/deploy-temp/* /var/www/html/"
             ]' \
