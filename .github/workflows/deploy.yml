@@ -22,52 +22,33 @@ jobs:
 
       - name: Deploy via SSM to EC2
         id: ssm_deploy
-        run: |
-          echo "Sending SSM deployment command..."
+        - name: Wait for SSM and Fetch Output
+  run: |
+    echo "Waiting for SSM command to complete..."
+    for i in {1..20}; do
+      STATUS=$(aws ssm get-command-invocation \
+        --command-id "18400636-2dab-4481-8e98-694c551683bc" \
+        --instance-id "i-0f1bef28a30a63f12" \
+        --region us-east-1 \
+        --query "Status" \
+        --output text)
 
-          CMD_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy static HTML/CSS from GitHub via OIDC" \
-            --instance-ids "i-068d327ee8eb1b4d7" \
-            --region us-east-1 \
-            --parameters "commands=[
-              rm -rf /tmp/deploy-temp,
-              git clone https://${{ secrets.GH_PAT }}@github.com/sanket701748/static.git /tmp/deploy-temp,
-              rm -rf /var/www/html/*,
-              cp -r /tmp/deploy-temp/* /var/www/html/
-            ]" \
-            --query "Command.CommandId" \
-            --output text)
+      echo "Current Status: $STATUS"
 
-          echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Wait for SSM and Fetch Output
-        run: |
-          echo "Waiting for SSM command to complete..."
-          for i in {1..10}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-              --instance-id "i-068d327ee8eb1b4d7" \
-              --region us-east-1 \
-              --query "Status" \
-              --output text)
-
-            echo "Current Status: $STATUS"
-
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "✅ SSM command succeeded!"
-              break
-            elif [[ "$STATUS" == "Failed" ]]; then
-              echo "❌ SSM command failed. Error:"
-              aws ssm get-command-invocation \
-                --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-                --instance-id "i-068d327ee8eb1b4d7" \
-                --region us-east-1 \
-                --query "StandardErrorContent" \
-                --output text
-              exit 1
-            else
-              echo "⏳ Still waiting..."
-              sleep 5
-            fi
-          done
+      if [[ "$STATUS" == "Success" ]]; then
+        echo "✅ SSM command succeeded!"
+        break
+      elif [[ "$STATUS" == "Failed" ]]; then
+        echo "❌ SSM command failed. Error output:"
+        aws ssm get-command-invocation \
+          --command-id "18400636-2dab-4481-8e98-694c551683bc" \
+          --instance-id "i-0f1bef28a30a63f12" \
+          --region us-east-1 \
+          --query "StandardErrorContent" \
+          --output text
+        exit 1
+      else
+        echo "⏳ Still waiting..."
+        sleep 10
+      fi
+    done
