@@ -55,6 +55,7 @@ jobs:
             --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
             --parameters commands="\
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com && \
             docker pull 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest && \
             docker stop ${{ secrets.ECR_REPOSITORY }} || true && \
             docker rm ${{ secrets.ECR_REPOSITORY }} || true && \
