@@ -1,74 +1,63 @@
-name: Deploy Static Website via SSM
+name: Deploy to EC2 via OIDC + SSM
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger when pushing to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
-      - name: Send SSM Command to EC2
-        id: ssm_deploy
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Configure AWS credentials via OIDC (no AWS keys needed)
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC  # Your GitHub-OIDC role ARN
+          aws-region: ${{ secrets.AWS_REGION }}  # Region from GitHub secrets
+
+      # Login to Amazon ECR (Private repository login)
+      - name: Login to Amazon ECR
         run: |
-          CMD_ID=$(aws ssm send-command \
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+          docker login --username AWS --password-stdin 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+      # Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.ECR_REPOSITORY }} .
+
+      # Tag Docker image
+      - name: Tag Docker image
+        run: |
+          docker tag ${{ secrets.ECR_REPOSITORY }}:latest \
+          315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+
+      # Push Docker image to ECR
+      - name: Push Docker image to ECR
+        run: |
+          docker push \
+          315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+
+      # Deploy the Docker container to EC2 via SSM (Using the EC2 Instance ID from GitHub secrets)
+      - name: Deploy on EC2 using SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy static HTML/CSS from GitHub" \
-            --instance-ids "i-068d327ee8eb1b4d7" \
-            --region us-east-1 \
-            --parameters "commands=[
-              rm -rf /tmp/deploy-temp,
-              git clone https://${{ secrets.GH_PAT }}@github.com/sanket701748/static.git /tmp/deploy-temp,
-              rm -rf /var/www/html/*,
-              cp -r /tmp/deploy-temp/* /var/www/html/
-            ]" \
-            --query "Command.CommandId" \
-            --output text)
-
-          echo "command_id=$CMD_ID" >> "$GITHUB_OUTPUT"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-      - name: Wait for SSM Command & Fetch Output
-        run: |
-          echo "Waiting for SSM command to complete..."
-
-          for i in {1..10}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-              --instance-id "i-068d327ee8eb1b4d7" \
-              --region us-east-1 \
-              --query "Status" \
-              --output text)
-
-            echo "Current Status: $STATUS"
-
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "✅ SSM command completed successfully. Output:"
-              aws ssm get-command-invocation \
-                --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-                --instance-id "i-068d327ee8eb1b4d7" \
-                --region us-east-1 \
-                --query "StandardOutputContent" \
-                --output text
-              break
-            elif [[ "$STATUS" == "Failed" ]]; then
-              echo "❌ SSM command failed. Error:"
-              aws ssm get-command-invocation \
-                --command-id "${{ steps.ssm_deploy.outputs.command_id }}" \
-                --instance-id "i-068d327ee8eb1b4d7" \
-                --region us-east-1 \
-                --query "StandardErrorContent" \
-                --output text
-              exit 1
-            else
-              echo "⏳ Still waiting..."
-              sleep 5
-            fi
-          done
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}.
+            --parameters commands="\
+            docker pull 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest && \
+            docker stop ${{ secrets.ECR_REPOSITORY }} || true && \
+            docker rm ${{ secrets.ECR_REPOSITORY }} || true && \
+            docker run -d -p 80:80 --name ${{ secrets.ECR_REPOSITORY }} \
+            315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest" \
+            --region ${{ secrets.AWS_REGION }}
