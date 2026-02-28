@@ -1,9 +1,9 @@
-name: Deploy to ECS
+name: Deploy to ECS (Fargate)
 
 on:
   push:
     branches:
-      - main  # Trigger on push to main branch
+      - main
 
 jobs:
   deploy:
@@ -13,50 +13,70 @@ jobs:
       id-token: write
       contents: read
 
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPOSITORY: my-app
+      ECS_CLUSTER: my-cluster
+      ECS_SERVICE: My-Ecs-Task-Defination-service-xmi2u1ov
+      ECS_TASK_DEFINITION: My-Ecs-Task-Defination
+      CONTAINER_NAME: Ecs-Container
+
     steps:
-      # Step 1: Checkout code
+      # 1️⃣ Checkout code
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      # Step 2: Set up AWS credentials (via OIDC)
-      - name: Set up AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      # 2️⃣ Configure AWS credentials using OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC  # Your GitHub OIDC role ARN
-          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC
+          aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: Log in to Amazon ECR
-      - name: Log in to Amazon ECR
+      # 3️⃣ Login to Amazon ECR
+      - name: Login to Amazon ECR
         run: |
-          aws ecr get-login-password --region us-east-1 | \
-          docker login --username AWS --password-stdin 315976078485.dkr.ecr.us-east-1.amazonaws.com
+          aws ecr get-login-password --region $AWS_REGION | \
+          docker login --username AWS --password-stdin 315976078485.dkr.ecr.$AWS_REGION.amazonaws.com
 
-      # Step 4: Build Docker image
+      # 4️⃣ Build Docker image
       - name: Build Docker image
         run: |
-          docker build -t my-app .
+          docker build -t $ECR_REPOSITORY .
 
-      # Step 5: Tag Docker image
+      # 5️⃣ Tag Docker image
       - name: Tag Docker image
         run: |
-          docker tag my-app:latest 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
+          docker tag $ECR_REPOSITORY:latest \
+          315976078485.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
-      # Step 6: Push Docker image to ECR
-      - name: Push Docker image to ECR
+      # 6️⃣ Push Docker image to ECR
+      - name: Push Docker image
         run: |
-          docker push 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
+          docker push 315976078485.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
-      # Step 7: Register a new revision of the ECS task definition
-      - name: Register new ECS task definition
+      # 7️⃣ Download existing task definition
+      - name: Download current task definition
         run: |
-          aws ecs register-task-definition \
-            --family My-Ecs-Task-Defination \
-            --container-definitions "[{\"name\":\"Ecs-Container\",\"image\":\"315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest\",\"memory\":2048,\"cpu\":1024,\"essential\":true}]"
+          aws ecs describe-task-definition \
+            --task-definition $ECS_TASK_DEFINITION \
+            --query taskDefinition \
+            > task-definition.json
 
-      # Step 8: Update ECS service with the new task definition revision
-      - name: Update ECS service
-        run: |
-          aws ecs update-service \
-            --cluster my-cluster \
-            --service My-Ecs-Task-Defination-service-xmi2u1ov \
-            --task-definition My-Ecs-Task-Defination
+      # 8️⃣ Update image inside task definition
+      - name: Render new task definition
+        id: render-task
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: 315976078485.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
+
+      # 9️⃣ Deploy updated task definition to ECS
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
