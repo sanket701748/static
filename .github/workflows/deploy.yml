@@ -1,9 +1,9 @@
-name: Deploy to EC2 via OIDC + SSM
+name: Deploy to ECS
 
 on:
   push:
     branches:
-      - main  # Trigger when pushing to the main branch
+      - main  # Trigger on push to main branch
 
 jobs:
   deploy:
@@ -14,51 +14,43 @@ jobs:
       contents: read
 
     steps:
-      # Checkout the code
+      # Step 1: Checkout code
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
-      # Configure AWS credentials via OIDC (no AWS keys needed)
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      # Step 2: Set up AWS credentials (via OIDC)
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC  # Your GitHub-OIDC role ARN
-          aws-region: ${{ secrets.AWS_REGION }}  # Region from GitHub secrets
+          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC  # Your GitHub OIDC role ARN
+          aws-region: us-east-1
 
-      # Login to Amazon ECR (Private repository login)
-      - name: Login to Amazon ECR
+      # Step 3: Log in to Amazon ECR
+      - name: Log in to Amazon ECR
         run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-          docker login --username AWS --password-stdin 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          aws ecr get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin 315976078485.dkr.ecr.us-east-1.amazonaws.com
 
-      # Build Docker image
+      # Step 4: Build Docker image
       - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.ECR_REPOSITORY }} .
+          docker build -t my-app .
 
-      # Tag Docker image
+      # Step 5: Tag Docker image for ECR
       - name: Tag Docker image
         run: |
-          docker tag ${{ secrets.ECR_REPOSITORY }}:latest \
-          315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+          docker tag my-app:latest 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
 
-      # Push Docker image to ECR
+      # Step 6: Push Docker image to ECR
       - name: Push Docker image to ECR
         run: |
-          docker push \
-          315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+          docker push 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
 
-      # Deploy the Docker container to EC2 via SSM (Using the EC2 Instance ID from GitHub secrets)
-      - name: Deploy on EC2 using SSM
+      # Step 7: Update ECS Service to use new image
+      - name: Update ECS Service
         run: |
-          aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
-            --document-name "AWS-RunShellScript" \
-            --parameters commands="\
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com && \
-            docker pull 315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest && \
-            docker stop ${{ secrets.ECR_REPOSITORY }} || true && \
-            docker rm ${{ secrets.ECR_REPOSITORY }} || true && \
-            docker run -d -p 80:80 --name ${{ secrets.ECR_REPOSITORY }} \
-            315976078485.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest" \
-            --region ${{ secrets.AWS_REGION }}
+          aws ecs update-service \
+            --cluster my-cluster \
+            --service My-Ecs-Task-Defination-service-xmi2u1ov \
+            --force-new-deployment \
+            --image 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
