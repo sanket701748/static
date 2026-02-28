@@ -22,57 +22,62 @@ jobs:
       CONTAINER_NAME: Ecs-Container
 
     steps:
-      # 1️⃣ Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Configure AWS credentials using OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC
           aws-region: ${{ env.AWS_REGION }}
 
-      # 3️⃣ Login to Amazon ECR
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_REGION | \
           docker login --username AWS --password-stdin 315976078485.dkr.ecr.$AWS_REGION.amazonaws.com
 
-      # 4️⃣ Build Docker image
       - name: Build Docker image
         run: |
           docker build -t $ECR_REPOSITORY .
 
-      # 5️⃣ Tag Docker image
       - name: Tag Docker image
         run: |
           docker tag $ECR_REPOSITORY:latest \
           315976078485.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
-      # 6️⃣ Push Docker image to ECR
       - name: Push Docker image
         run: |
           docker push 315976078485.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
 
-      # 7️⃣ Download existing task definition
-      - name: Download current task definition
+      # 🔥 Get clean task definition
+      - name: Download task definition
         run: |
           aws ecs describe-task-definition \
             --task-definition $ECS_TASK_DEFINITION \
             --query taskDefinition \
-            > task-definition.json
+            > task-def.json
 
-      # 8️⃣ Update image inside task definition
+      # 🔥 Remove fields that cannot be re-registered
+      - name: Clean task definition
+        run: |
+          cat task-def.json | jq 'del(
+            .taskDefinitionArn,
+            .revision,
+            .status,
+            .requiresAttributes,
+            .compatibilities,
+            .registeredAt,
+            .registeredBy
+          )' > clean-task-def.json
+
       - name: Render new task definition
         id: render-task
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: task-definition.json
+          task-definition: clean-task-def.json
           container-name: ${{ env.CONTAINER_NAME }}
           image: 315976078485.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
 
-      # 9️⃣ Deploy updated task definition to ECS
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
