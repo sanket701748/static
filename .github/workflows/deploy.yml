@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Step 2: Set up AWS credentials
+      # Step 2: Set up AWS credentials (via OIDC)
       - name: Set up AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -46,15 +46,15 @@ jobs:
         run: |
           docker push 315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
 
-      # Step 7: Register new revision of task definition with the new image
-      - name: Register new task definition revision
+      # Step 7: Register a new revision of the ECS task definition
+      - name: Register new ECS task definition
         run: |
           aws ecs register-task-definition \
             --family My-Ecs-Task-Defination \
             --container-definitions "[{\"name\":\"Ecs-Container\",\"image\":\"315976078485.dkr.ecr.us-east-1.amazonaws.com/my-app:latest\",\"memory\":2048,\"cpu\":1024,\"essential\":true}]"
 
-      # Step 8: Update ECS Service with the new task definition revision
-      - name: Update ECS Service with the new task definition
+      # Step 8: Update ECS service with the new task definition revision
+      - name: Update ECS service
         run: |
           aws ecs update-service \
             --cluster my-cluster \
