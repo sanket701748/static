@@ -1,93 +1,36 @@
-name: Deploy to ECS (Fargate)
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write
-      contents: read
-
-    env:
-      AWS_REGION: us-east-1
-      ACCOUNT_ID: 315976078485
-      ECR_REPOSITORY: my-app
-      ECS_CLUSTER: my-cluster
-      ECS_SERVICE: My-Ecs-Task-Defination-service-xmi2u1ov
-      ECS_TASK_DEFINITION: My-Ecs-Task-Defination
-      CONTAINER_NAME: Ecs-Container
-
-    steps:
-      # 1️⃣ Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # 2️⃣ Configure AWS credentials using OIDC
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::315976078485:role/GitHub-OIDC
-          aws-region: ${{ env.AWS_REGION }}
-
-      # 3️⃣ Login to Amazon ECR
-      - name: Login to Amazon ECR
-        run: |
-          aws ecr get-login-password --region $AWS_REGION | \
-          docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-      # 4️⃣ Build Docker image
-      - name: Build Docker image
-        run: |
-          docker build -t $ECR_REPOSITORY .
-
-      # 5️⃣ Tag Docker image
-      - name: Tag Docker image
-        run: |
-          docker tag $ECR_REPOSITORY:latest \
-          $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
-
-      # 6️⃣ Push Docker image to ECR
-      - name: Push Docker image
-        run: |
-          docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
-
-      # 7️⃣ Download current task definition
-      - name: Download current task definition
+      # 7️⃣ Get full task definition JSON
+      - name: Download task definition
         run: |
           aws ecs describe-task-definition \
             --task-definition $ECS_TASK_DEFINITION \
-            --query taskDefinition \
-            > task-definition.json
+            --query taskDefinition > full-task-def.json
 
-      # 8️⃣ Clean task definition JSON (remove unsupported fields)
-      - name: Clean task definition JSON
+      # 8️⃣ Create clean Fargate-compatible task definition
+      - name: Create clean task definition
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          jq 'del(
-            .taskDefinitionArn,
-            .revision,
-            .status,
-            .requiresAttributes,
-            .compatibilities,
-            .registeredAt,
-            .registeredBy
-          )' task-definition.json > cleaned-task-definition.json
 
-      # 9️⃣ Render new task definition with updated image
+          jq '{
+            family: .family,
+            taskRoleArn: .taskRoleArn,
+            executionRoleArn: .executionRoleArn,
+            networkMode: .networkMode,
+            requiresCompatibilities: .requiresCompatibilities,
+            cpu: .cpu,
+            memory: .memory,
+            containerDefinitions: .containerDefinitions
+          }' full-task-def.json > task-def.json
+
+      # 9️⃣ Update image inside task definition
       - name: Render new task definition
         id: render-task
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: cleaned-task-definition.json
+          task-definition: task-def.json
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ env.ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
 
-      # 🔟 Deploy updated task definition to ECS
+      # 🔟 Deploy to ECS
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
